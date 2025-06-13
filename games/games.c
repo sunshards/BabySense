@@ -1,0 +1,640 @@
+#include "hal.h"
+
+#include "string.h"
+#include "ssd1306.h"
+#include "stdio.h"
+#include "faces.c"
+#include "animals.c"
+#include "scf.c"
+#include "results.c"
+#include "prox.h"
+
+#define GREEN_BTN  PAL_LINE( GPIOA, 10U )
+#define YELLOW_BTN PAL_LINE( GPIOB, 0U )
+#define BLUE_BTN   PAL_LINE( GPIOB, 5U )
+#define WHITE_BTN  PAL_LINE( GPIOB, 4U )
+
+#define DISPLAY_1_SCL PAL_LINE(GPIOB, 8U)
+#define DISPLAY_1_SDA PAL_LINE(GPIOB, 9U)
+#define DISPLAY_2_SCL PAL_LINE(GPIOC, 8U)
+#define DISPLAY_2_SDA PAL_LINE(GPIOC, 9U)
+
+typedef enum { EMOTIONS, GAMELIST, INTRODUCTION, GAME} displayState; // GENERALE PER I 2 MONITOR
+typedef enum { EYE, FIGURE, SMILEY, RESULT, COMMANDS, INSTRUCTIONS, SELECTION, BLANK } displayScene; // MONITOR SINGOLO
+typedef enum { GEOMETRY, ANIMALS, SCF } gameType;
+
+static displayState menu;
+
+static char buff[20];
+static const uint8_t BUFF_SIZE = 20;
+
+static const uint8_t greenID = 0;
+static const uint8_t yellowID = 1;
+static const uint8_t blueID = 2;
+static const uint8_t whiteID = 3;
+
+// Flag che viene bloccata per aggiornare la figura da disegnare
+static mutex_t drawStateMtx;
+// 0: X, 1: Quadrato, 2: Triangolo, 3: Cerchio
+// 0: Cane, 2: Gatto, 3: Zebra, 4: Mucca
+// 0: Sasso, 1: Carta, 2: Forbici
+static uint8_t figure;
+static uint8_t scfChoiceMade = 0;
+
+
+static displayScene display1 = BLANK;
+static displayScene display2 = BLANK ;
+
+static uint8_t display1Inverted = 0;
+static uint8_t display2Inverted = 0;
+static gameType currentGame;
+
+static uint8_t buttonPressed;
+
+static const char geometryStrings[4][20] = {"1. Croce", "2. Quadrato", "3. Triangolo", "4. Cerchio"};
+static const char animalStrings[4][20] = {"1. Cane", "2. Gatto", "3. Zebra", "4. Mucca"};
+static const char scfStrings[4][20] = {"1. Sasso", "2. Carta", "3. Forbici", ""};
+static const char choiceGameStrings[4][20] = {"1. Forme", "2. Animali", "3. SCF", "4. Esci"};
+static const char instructionStrings[3][20] = {"", "1. GIOCA", "2. ESCI"};
+static const int scfVictories[3][3] = {
+                                   {0, 0, 1}, //SASSO
+                                   {1, 0, 0}, //CARTA
+                                   {0, 1, 0}  //FORBICI
+};
+static uint8_t hasWon = 2; //All'inizio hasWon � impostata a 2 e ci� � gestito in modo da non far apparire niente.
+
+static virtual_timer_t vt;
+static void vt_cb(virtual_timer_t *vtp, void *p);
+
+
+static const I2CConfig i2ccfg = {
+  STM32_TIMINGR_PRESC(8U)  |
+  STM32_TIMINGR_SCLDEL(3U) | STM32_TIMINGR_SDADEL(3U) |
+  STM32_TIMINGR_SCLH(3U)   | STM32_TIMINGR_SCLL(9U),
+  0,
+  0
+};
+
+static const SSD1306Config ssd1306cfg = {
+  &I2CD1, // era 1 prima
+  &i2ccfg,
+  SSD1306_SAD_0X78,
+};
+
+/* DISPLAY A8 A9
+static const SSD1306Config ssd1306cfg2 = {
+  &I2CD2,
+  &i2ccfg,
+  SSD1306_SAD_0X78,
+};
+*/
+
+/* DISPLAY C8 C9*/
+static const SSD1306Config ssd1306cfg2 = {
+  &I2CD3,
+  &i2ccfg,
+  SSD1306_SAD_0X78,
+};
+
+static SSD1306Driver SSD1306D1;
+static SSD1306Driver SSD1306D2;
+
+static void changeMenu(displayState newMenu) {
+
+  if (menu != newMenu) {
+    // GIOCO
+    if (newMenu == GAMELIST) {
+      hasWon = 2; // Reimpostiamo hasWon in modo che sia disattivato
+
+      if (display1Inverted == 1) {
+        ssd1306ToggleInvert(&SSD1306D1); // Le figure hanno bisogno dello schermo invertito
+        display1Inverted = 0;
+      }
+      if (display2Inverted == 1) {
+        ssd1306ToggleInvert(&SSD1306D2);
+        display2Inverted = 0;
+      }
+      display1 = SMILEY;
+      display2 = SELECTION;
+    }
+
+    // GIOCO
+    if (newMenu == INTRODUCTION) {
+      if (display1Inverted == 0) {
+        ssd1306ToggleInvert(&SSD1306D1);
+        display1Inverted = 1;
+      }
+      if (display2Inverted == 1) {
+        ssd1306ToggleInvert(&SSD1306D2);
+        display2Inverted = 0;
+      }
+      display1 = RESULT;
+      display2 = INSTRUCTIONS;
+    }
+
+    // GIOCO
+    if (newMenu == GAME) {
+      scfChoiceMade = 0;
+      uint8_t newFigure;
+
+      trngStart(&TRNGD1, NULL);
+      trngGenerate(&TRNGD1, 1, &newFigure);
+      trngStop(&TRNGD1);
+      newFigure %= 4;
+
+      chMtxLock( &drawStateMtx );
+      figure = newFigure;
+      chMtxUnlock( &drawStateMtx );
+
+      if (display1Inverted == 0) {
+        ssd1306ToggleInvert(&SSD1306D1); // Le figure hanno bisogno dello schermo invertito
+        display1Inverted = 1;
+      }
+      if (display2Inverted == 1) {
+        ssd1306ToggleInvert(&SSD1306D2);
+        display2Inverted = 0;
+      }
+      display1 = FIGURE;
+      display2 = COMMANDS;
+    }
+
+  }
+  menu = newMenu;
+}
+
+static void showPictures(uint8_t display) {
+
+  SSD1306Driver driver = SSD1306D1;
+  if (display == 1) { // Si parte a contare da 1
+    driver = SSD1306D2;
+  }
+
+  uint8_t currentFigure;
+  const ssd1306_color_t *image_data;
+  int x = 0;
+  int y = 0;
+  int c = 0;
+
+  // Load della figura da disegnare
+  chMtxLock( &drawStateMtx );
+  currentFigure = figure;
+  chMtxUnlock( &drawStateMtx );
+
+  // Clear dello schermo
+  ssd1306FillScreen(&driver, SSD1306_COLOR_BLACK);
+
+  if (currentGame == GEOMETRY) {
+    // Switch della figura da disegnare
+    switch(currentFigure) {
+      case 0: // cross
+        ssd1306DrawLine(&driver, 25, 20, 100, 60, SSD1306_COLOR_BLACK);
+        ssd1306DrawLine(&driver, 100, 20, 25, 60, SSD1306_COLOR_BLACK);
+        break;
+      case 1: // quadrato
+        ssd1306DrawRectangleFill(&driver, 40, 20, 40, 40, SSD1306_COLOR_BLACK);
+        break;
+      case 2: // triangolo
+        ssd1306DrawTriangleFill(&driver, 22, 60, 102, 60, 62, 20, SSD1306_COLOR_BLACK);
+        break;
+      case 3:
+        ssd1306DrawCircleFill(&driver, 62, 40, 20, SSD1306_COLOR_BLACK);
+        break;
+    }
+  }
+  else if (currentGame == ANIMALS) {
+    switch(currentFigure) {
+      case 0:
+        image_data = cane_data;
+        break;
+      case 1:
+        image_data = gatto_data;
+        break;
+      case 2:
+        image_data = zebra_data;
+        break;
+      case 3:
+        image_data = mucca_data;
+        break;
+    }
+    ssd1306FillScreen(&driver, 0x00);
+    for(y = 0; y<64; y++){
+      for(x = 0; x<128; x++){
+        ssd1306DrawPixel(&driver, x,y, image_data[c]);
+        c++;
+      }
+    }
+  }
+  else if (currentGame == SCF) {
+    if (currentFigure == 3) { // Non c'� una quarta figura quindi viene riscelta
+      trngStart(&TRNGD1, NULL);
+      trngGenerate(&TRNGD1, 1, &currentFigure);
+      trngStop(&TRNGD1);
+      currentFigure %= 3;
+
+      // Load della figura da disegnare
+      chMtxLock( &drawStateMtx );
+      figure = currentFigure;
+      chMtxUnlock( &drawStateMtx );
+    }
+
+    if (scfChoiceMade == 0) {
+      image_data = interrogativo_data;
+      ssd1306FillScreen(&driver, 0x00);
+      for(y = 0; y<64; y++){
+        for(x = 0; x<128; x++){
+          ssd1306DrawPixel(&driver, x,y , image_data[c]);
+          c++;
+        }
+      }
+    }
+    else {
+      switch(currentFigure) {
+        case 0:
+          image_data = sasso_data;
+          break;
+        case 1:
+          image_data = carta_data;
+          break;
+        case 2:
+          image_data = forbici_data;
+          break;
+      }
+      ssd1306FillScreen(&driver, 0x00);
+      for(y = 0; y<64; y++){
+        for(x = 0; x<128; x++){
+          ssd1306DrawPixel(&driver, x,y , image_data[c]);
+          c++;
+        }
+      }
+      ssd1306UpdateScreen(&driver); //SERVE PER MOSTRARE LE FIGURE
+      chThdSleepMilliseconds(2500);
+      changeMenu(INTRODUCTION);
+      return;
+    }
+  }
+  ssd1306UpdateScreen(&driver); //SERVE PER MOSTRARE LE FIGURE
+}
+
+static bool just_changed = false;
+static uint8_t curr_face_level = 0;
+
+static void showEmoticon(uint8_t display, uint8_t face) {
+  SSD1306Driver driver = SSD1306D1;
+  if (display == 1) {
+    driver = SSD1306D2;
+  }
+  int x = 0;
+  int y = 0;
+  int c = 0;
+
+  uint32_t prox_val = prox_get_time();
+
+  if(!just_changed && prox_val < 450){
+    curr_face_level++;
+
+    if(curr_face_level >=  4){
+      curr_face_level = 0;
+    }
+
+    just_changed = true;
+  }else if(just_changed && prox_val > 450){
+    just_changed = false;
+  }
+
+  const ssd1306_color_t *image_data;
+
+  switch(curr_face_level){
+  case 0:
+    image_data = smile_data;
+    break;
+  case 1:
+      image_data = happy_data;
+      break;
+  case 2:
+      image_data = stars_data;
+      break;
+  case 3:
+      image_data = angry_data;
+      break;
+  }
+
+  /*if (face == 1) {
+    image_data = smile_data;
+  }
+  if (face == 0) {
+    image_data = sad_data;
+  }*/
+  ssd1306FillScreen(&driver, 0x00);
+  for(x = 0; x<64; x++){
+    for(y = 0; y<64; y++){
+      ssd1306DrawPixel(&driver, y+32,x , image_data[c]);
+      c++;
+    }
+  }
+  ssd1306UpdateScreen(&driver);
+
+}
+
+static void showResult(uint8_t display, uint8_t result) {
+  SSD1306Driver driver = SSD1306D1;
+  if (display == 1) {
+    driver = SSD1306D2;
+  }
+  int x = 0;
+  int y = 0;
+  int c = 0;
+  const ssd1306_color_t *image_data;
+
+  ssd1306FillScreen(&driver, 0x00);
+  if(result == 2) { // Significa che non si ha ancora vinto n� perso, quindi si pu� stampare il titolo del gioco
+      if (currentGame == GEOMETRY) {
+        ssd1306GotoXy(&driver, 0, 28);
+        chsnprintf(buff, BUFF_SIZE, "%s", "Geometria");
+        ssd1306Puts(&driver, buff, &ssd1306_font_11x18, SSD1306_COLOR_BLACK);
+      }
+      else if (currentGame == ANIMALS) {
+        ssd1306GotoXy(&driver, 0, 28);
+        chsnprintf(buff, BUFF_SIZE, "%s", "Animali");
+        ssd1306Puts(&driver, buff, &ssd1306_font_11x18, SSD1306_COLOR_BLACK);
+    } else {
+      ssd1306GotoXy(&driver, 0, 21);
+      chsnprintf(buff, BUFF_SIZE, "%s", "Sasso Carta");
+      ssd1306Puts(&driver, buff, &ssd1306_font_11x18, SSD1306_COLOR_BLACK);
+      ssd1306GotoXy(&driver, 0, 42);
+      chsnprintf(buff, BUFF_SIZE, "%s", "Forbici");
+      ssd1306Puts(&driver, buff, &ssd1306_font_11x18, SSD1306_COLOR_BLACK);
+    }
+    ssd1306UpdateScreen(&driver);
+    return;
+  }
+
+  if (result == 1) {
+    image_data = hai_vinto;
+  }
+  if (result == 0) {
+    image_data = hai_perso;
+  }
+  for(y = 0; y<64; y++){
+    for(x = 0; x<128; x++){
+      ssd1306DrawPixel(&driver, x,y , image_data[c]);
+      c++;
+    }
+  }
+  ssd1306UpdateScreen(&driver);
+
+}
+
+static void showBlank(uint8_t display) {
+  SSD1306Driver driver = SSD1306D1;
+  if (display == 1) {
+    driver = SSD1306D2;
+  }
+
+  ssd1306FillScreen(&driver, 0x00);
+  ssd1306UpdateScreen(&driver);
+}
+
+static void showSelectionMenuSmall(uint8_t display, char strings[][20]) {
+  SSD1306Driver driver = SSD1306D1;
+  if (display == 1) {
+    driver = SSD1306D2;
+  }
+
+  ssd1306ToggleInvert(&driver);
+  ssd1306FillScreen(&driver, 0x00);
+  for (int i=0; i<4; i++) {
+      uint8_t y = 20+(i-1)*15;
+      if (i==0) {y = 7;}
+      ssd1306GotoXy(&driver, 0, y);
+      chsnprintf(buff, BUFF_SIZE, "%s", strings[i]);
+      ssd1306Puts(&driver, buff, &ssd1306_font_7x10, SSD1306_COLOR_BLACK);
+  }
+  ssd1306UpdateScreen(&driver);
+
+}
+
+static void showSelectionMenuBig(uint8_t display, char strings[][20]) {
+  SSD1306Driver driver = SSD1306D1;
+  if (display == 1) {
+    driver = SSD1306D2;
+  }
+
+  ssd1306ToggleInvert(&driver);
+  ssd1306FillScreen(&driver, 0x00);
+  for (int i=0; i<3; i++) {
+      uint8_t y = i * 20;
+      ssd1306GotoXy(&driver, 0, y);
+      chsnprintf(buff, BUFF_SIZE, "%s", strings[i]);
+      ssd1306Puts(&driver, buff, &ssd1306_font_11x18, SSD1306_COLOR_BLACK);
+  }
+  ssd1306UpdateScreen(&driver);
+
+}
+
+static void button_cb(void *arg) {
+  uint8_t buttonID = *((uint8_t*) arg);
+
+  // Variabile globale
+  buttonPressed = buttonID;
+
+  if (menu == GAMELIST) {
+     switch(buttonPressed) {
+       case 0:
+         currentGame = GEOMETRY;
+         changeMenu(INTRODUCTION);
+         break;
+       case 1:
+         currentGame = ANIMALS;
+         changeMenu(INTRODUCTION);
+         break;
+       case 2:
+         currentGame = SCF;
+         changeMenu(INTRODUCTION);
+         break;
+       case 3:
+         changeMenu(EMOTIONS);
+     }
+   }
+  else if (menu == INTRODUCTION ) {
+    switch(buttonPressed) {
+      case 0:
+        changeMenu(GAME);
+        break;
+      case 1:
+        changeMenu(GAMELIST);
+        break;
+    }
+  }
+  else if (menu == GAME) {
+    if (currentGame == SCF) {
+      if (!(buttonPressed == 3)) {
+        scfChoiceMade = 1;
+        hasWon = scfVictories[buttonPressed][figure];
+        // IN questo caso il changemenu � gestito dal thread del display, che aspetta 2500 millisecondi
+      }
+    }
+    else {
+      if (buttonPressed == figure) {
+        hasWon = 1;
+      } else { hasWon = 0; }
+      changeMenu(INTRODUCTION);
+    }
+  }
+
+  ioline_t buttonLine;
+  switch(buttonPressed) {
+    case 0:
+        buttonLine = GREEN_BTN;
+        break;
+    case 1:
+        buttonLine = YELLOW_BTN;
+        break;
+    case 2:
+        buttonLine = BLUE_BTN;
+        break;
+    case 3:
+        buttonLine = WHITE_BTN;
+        break;
+  }
+
+  chSysLockFromISR();
+  /* Disabling the event on the line and setting a timer to
+     re-enable it. */
+  //palDisableLineEventI(buttonLine);
+  /* Arming the VT timer to re-enable the event in 50ms. */
+  //chVTResetI(&vt);
+  //chVTDoSetI(&vt, TIME_MS2I(350), vt_cb, arg);
+  chSysUnlockFromISR();
+
+}
+
+/*===========================================================================*/
+/* VT related code.                                                          */
+/*===========================================================================*/
+/* Virtual timer. */
+/* Callback of the virtual timer. */
+static void vt_cb(virtual_timer_t *vtp, void *arg) {
+  (void)vtp;
+  uint8_t btn = *((uint8_t*) arg);
+
+  uint8_t buttonID;
+  ioline_t buttonLine;
+  if (btn == 0) {buttonLine = GREEN_BTN; buttonID = greenID; }
+  else if (btn == 1) {buttonLine = YELLOW_BTN; buttonID = yellowID;}
+  else if (btn == 2) {buttonLine = BLUE_BTN; buttonID = blueID;}
+  else if (btn == 3) {buttonLine = WHITE_BTN; buttonID = whiteID;}
+
+  chSysLockFromISR();
+  /* Enabling the event and associating the callback. */
+  palEnableLineEventI(buttonLine, PAL_EVENT_MODE_RISING_EDGE);
+  palSetLineCallbackI(buttonLine, button_cb, &buttonID);
+  chSysUnlockFromISR();
+}
+
+void games_thread(void * arg){
+  (void)arg;
+  chRegSetThreadName("GamesThread");
+
+  chVTObjectInit(&vt);
+
+  chMtxObjectInit( &drawStateMtx );
+
+  /* Configuring I2C related PINs */
+  // SCHERMO 1
+   palSetLineMode(DISPLAY_1_SCL, PAL_MODE_ALTERNATE(4) |
+                  PAL_STM32_OTYPE_OPENDRAIN | PAL_STM32_OSPEED_HIGHEST |
+                  PAL_STM32_PUPDR_PULLUP);
+   palSetLineMode(DISPLAY_1_SDA, PAL_MODE_ALTERNATE(4) |
+                  PAL_STM32_OTYPE_OPENDRAIN | PAL_STM32_OSPEED_HIGHEST |
+                  PAL_STM32_PUPDR_PULLUP);
+
+   palSetLineMode(DISPLAY_2_SCL, PAL_MODE_ALTERNATE(8) |
+                        PAL_STM32_OTYPE_OPENDRAIN | PAL_STM32_OSPEED_HIGHEST |
+                        PAL_STM32_PUPDR_PULLUP);
+   palSetLineMode(DISPLAY_2_SDA, PAL_MODE_ALTERNATE(8) |
+                    PAL_STM32_OTYPE_OPENDRAIN | PAL_STM32_OSPEED_HIGHEST |
+                    PAL_STM32_PUPDR_PULLUP);
+
+  /* Configuring buttons */
+  palSetLineMode( GREEN_BTN,  PAL_MODE_INPUT );
+  palSetLineMode( YELLOW_BTN, PAL_MODE_INPUT );
+  palSetLineMode( BLUE_BTN,   PAL_MODE_INPUT );
+  palSetLineMode( WHITE_BTN,  PAL_MODE_INPUT );
+
+  palEnableLineEvent(GREEN_BTN,  PAL_EVENT_MODE_RISING_EDGE);
+  palEnableLineEvent(YELLOW_BTN, PAL_EVENT_MODE_RISING_EDGE);
+  palEnableLineEvent(BLUE_BTN,   PAL_EVENT_MODE_RISING_EDGE);
+  palEnableLineEvent(WHITE_BTN,  PAL_EVENT_MODE_RISING_EDGE);
+
+  palSetLineCallback(GREEN_BTN,  button_cb,  &greenID);
+  palSetLineCallback(YELLOW_BTN, button_cb, &yellowID);
+  palSetLineCallback(BLUE_BTN,   button_cb,   &blueID);
+  palSetLineCallback(WHITE_BTN,  button_cb,  &whiteID);
+
+  sdStart(&SD2,NULL);
+
+  ssd1306ObjectInit(&SSD1306D1);
+  ssd1306Start(&SSD1306D1, &ssd1306cfg);
+
+  ssd1306ObjectInit(&SSD1306D2);
+  ssd1306Start(&SSD1306D2, &ssd1306cfg2);
+
+  changeMenu(GAMELIST);
+  const char *commandsStrings;
+
+  while(true) {
+      if (currentGame == GEOMETRY) { commandsStrings = geometryStrings; }
+      else if (currentGame == ANIMALS) { commandsStrings = animalStrings; }
+      else if (currentGame == SCF) { commandsStrings = scfStrings; }
+
+      switch(display1) {
+        case FIGURE:
+          showPictures(0);
+          break;
+        case SMILEY:
+          showEmoticon(0, 1);
+          break;
+        case RESULT:
+          showResult(0, hasWon);
+          break;
+        case COMMANDS:
+          showSelectionMenuSmall(0, commandsStrings);
+          break;
+        case SELECTION:
+          showSelectionMenuSmall(0, choiceGameStrings);
+          break;
+        case BLANK:
+          showBlank(0);
+          break;
+        case INSTRUCTIONS:
+          showSelectionMenuBig(0, instructionStrings);
+          break;
+      }
+
+      switch(display2) {
+        case FIGURE:
+          showPictures(1);
+          break;
+        case SMILEY:
+          showEmoticon(1, 1);
+          break;
+        case RESULT:
+          showResult(1, hasWon);
+          break;
+        case COMMANDS:
+          showSelectionMenuSmall(1, commandsStrings);
+          break;
+        case SELECTION:
+          showSelectionMenuSmall(1, choiceGameStrings);
+          break;
+        case BLANK:
+          showBlank(1);
+          break;
+        case INSTRUCTIONS:
+          showSelectionMenuBig(1, instructionStrings);
+          break;
+      }
+    chThdSleepMilliseconds(250);
+  }
+
+}
