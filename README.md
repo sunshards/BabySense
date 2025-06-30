@@ -1,42 +1,88 @@
 # BabySense
 
-<img src="readme_assets/1.jpeg" width="500"/>
-<img src="readme_assets/2.jpeg" width="500"/>
+**BabySense** is an embedded prototype baby monitor designed to assist both parents and babies. It was created during the **Neapolis Innovation Summer Campus 2024 (NISC)**, a week-long hackathon hosted at **STMicroelectronics Naples**.
 
-This is the unofficial repository of BabySense, a project that was created during the Neapolis Innovation Summer Campus 2024 (NISC) in collaboration with STMicroelectronics. It was an Hackathon that took place  in the STMicroelectronics Naples branch in which each team had about 5 days to learn how to work with embedded systems and create a project from scratch.
+The project was built from scratch in under 5 days, combining sensor data, real-time alerts, and playful interaction in a dual-device system.
 
-The aim of this prototype was to create a Baby Monitor that could be useful both for the parents and for the baby. The monitor on the parent side provides useful information like temperature and noise recognition. The parent can set a decibel threshold that plays an alarm after being met. On the kid's side, the monitor keeps the baby entertained with simple games such as Rock Paper Scissor, recognising Animals and Geometrical Shapes. The baby can also interact with the monitor by petting its head, which will make it look happier for a while, in a basic attempt to teach empathy.
+> 📁 Original codebase was hosted on a TortoiseSVN instance provided by STMicroelectronics.
 
-You can see [a short demo here](https://youtu.be/uJ5wRD_ZAyA).
+## 👶 Concept
 
-## Technologies
+BabySense consists of two parts:
 
-The project was created in about a week using a NucleoG4 board. We used the ChibiStudio toolchain that included an IDE and ChibiOS, a free embedded real time operating system.
+- **Parent Unit**: Displays environmental data (e.g. temperature, noise), and triggers an alarm if a customizable decibel threshold is exceeded.
+- **Baby Unit**: Engages the child through mini-games (Rock Paper Scissors, Animal and Shape Recognition), and responds to touch to simulate basic emotional feedback.
 
-We employed many sensors provided by the hackathon: the two devices communicate through an IR Sensor, the monitor has a Temperature and Humidity Sensor, a Proximity Sensor, two 48x84 LCDs, a mic and 4 buttons. The parents set the threshold using buttons and a speaker is used for the alarm.
+🎥 [Watch a short demo on YouTube](https://youtu.be/uJ5wRD_ZAyA)
 
-The boxes were created using recycled materials such as cardboard, tape and markers. The monitor was decorated to give a playful vibe while the parent's side is more minimalistic. 
+## 📸 Photos
 
-The code was originally uploaded on a TortoiseSVN instance provided by STMicroelectronics.
+<table>
 
-<img src="readme_assets/3.jpeg" width="500"/>
-<img src="readme_assets/4.png" width="500"/>
+<tr>
+<td><img src="readme_assets/1.jpeg" width="500"/></td>
+<td><img src="readme_assets/2.jpeg" width="500"/></td>
+</tr>
 
-## Team
+<tr>
+<td>BabySense Units</td>
+<td></td>
+</tr>
 
-The app was created by a team of 8 people from various backgrounds:
+<td><img src="readme_assets/3.jpeg" width="500"/></td>
+<td><img src="readme_assets/4.png" width="500"/></td>
 
-| Name  |  Course |
-|---|---|
-Luigi Inquieto     | Computer Engineering  |
-Fabrizio Bonomo    | Computer Engineering  |
-Lorenzo Cavaliere  | Computer Engineering  |
-Teresa Di Dona     | Computer Engineering  |
-Manuel Loffredo    | Computer Engineering  |
-Carmine Sorrentino | Computer Engineering  |
-Simone Boscaglia   | Computer Science      |
-Luca Criscuolo     | Cybersecurity         |
+<tr>
+<td>Display testing</td>
+<td>Close up on parent unit</td>
+</tr>
+
+</table>
+
+## 🔧 Technologies & Hardware
+
+The project was created in about a week using a **STM NucleoG4 board**. We used the **ChibiStudio** toolchain that included an IDE and ChibiOS, a free embedded real time operating system.
+
+We employed many sensors provided by the hackathon:
+
+| Component | Purpose |
+|----------|---------|
+| **IR Sensor** | Communication between baby and parent units |
+| **Temperature & Humidity Sensor** | Environmental monitoring |
+| **Proximity Sensor** | Petting detection on baby unit |
+| **Microphone** | Sound input for alarm threshold |
+| **Buttons** | Input for interaction and configuration |
+| **Four 48x84 LCDs** | UI display on both devices |
+| **Speaker** | Alarm sound feedback |
+
+The outer casing was made with recycled materials (cardboard, tape, markers), with a playful design on the baby unit and a minimal interface for the parent side.
+
+## 👥 Team
+
+Developed by an interdisciplinary team of students during NISC 2024:
+
+| Name | Course |
+|------|--------|
+| Luigi Inquieto | Computer Engineering |
+| Fabrizio Bonomo | Computer Engineering |
+| Lorenzo Cavaliere | Computer Engineering |
+| Teresa Di Dona | Computer Engineering |
+| Manuel Loffredo | Computer Engineering |
+| Carmine Sorrentino | Computer Engineering |
+| Simone Boscaglia | Computer Science |
+| Luca Criscuolo | Cybersecurity |
+
+<td><img src="readme_assets/team.jpg" width="500"/></td>
 
 
+## 🛠️ Status
 
+This is a **functional prototype** developed in under a week. Further iterations would involve:
 
+- Power optimization
+- Expanded gameplay logic and UI polish
+- Data logging for long-term monitoring
+
+## 📫 Contact
+
+This repository is maintained as a reference for the hackathon outcome. For inquiries, feel free to open an issue or reach out directly.
