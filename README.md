@@ -1,17 +1,16 @@
 # BabySense
 
-**BabySense** is an embedded prototype baby monitor designed to assist both parents and babies. It was created during the **Neapolis Innovation Summer Campus 2024 (NISC)**, a week-long hackathon hosted at **STMicroelectronics Naples**.
+**BabySense** is an embedded prototype baby monitor designed to assist both parents and babies. It was created during the **Neapolis Innovation Summer Campus 2024 (NISC)**, a week-long hackathon hosted at **STMicroelectronics Naples**. The project is just a functional prototype, developed in 5 days.
 
-The project was built from scratch in under 5 days, combining sensor data, real-time alerts, and playful interaction in a dual-device system.
 
-> 📁 Original codebase was hosted on a TortoiseSVN instance provided by STMicroelectronics.
+> 📁 Original codebase was hosted on a TortoiseSVN instance provided by STMicroelectronics. 
 
 ## 👶 Concept
 
 BabySense consists of two parts:
 
-- **Parent Unit**: Displays environmental data (e.g. temperature, noise), and triggers an alarm if a customizable decibel threshold is exceeded.
-- **Baby Unit**: Engages the child through mini-games (Rock Paper Scissors, Animal and Shape Recognition), and responds to touch to simulate basic emotional feedback.
+- **Baby Unit**: Engages the child through mini-games (Rock Paper Scissors, Animal and Shape Recognition), responds to touch to simulate basic emotional feedback and collects data for the baby's safety.
+- **Parent Unit**: Displays the environmental data collected from the Baby Unit(e.g. temperature, noise), and triggers an alarm if a customizable noise decibel is exceeded.
 
 🎥 [Watch a short demo on YouTube](https://youtu.be/uJ5wRD_ZAyA)
 
@@ -61,28 +60,15 @@ The outer casing was made with recycled materials (cardboard, tape, markers), wi
 
 Developed by an interdisciplinary team of students during NISC 2024:
 
-| Name | Course |
-|------|--------|
-| Luigi Inquieto | Computer Engineering |
-| Fabrizio Bonomo | Computer Engineering |
-| Lorenzo Cavaliere | Computer Engineering |
-| Teresa Di Dona | Computer Engineering |
-| Manuel Loffredo | Computer Engineering |
-| Carmine Sorrentino | Computer Engineering |
-| Simone Boscaglia | Computer Science |
-| Luca Criscuolo | Cybersecurity |
+| Name | Course | University |
+|------|--------| ---- |
+| Luigi Inquieto | Computer Engineering | University of Naples "Federico II" |
+| Fabrizio Bonomo | Computer Engineering | University of Naples "Federico II" |
+| Lorenzo Cavaliere | Computer Engineering | University of Naples "Federico II" |
+| Teresa Di Dona | Computer Engineering | University of Naples "Federico II" |
+| Manuel Loffredo | Computer Engineering | University of Naples "Federico II" |
+| Carmine Sorrentino | Computer Engineering | University of Naples "Federico II" |
+| Simone Boscaglia | Computer Science | University of Naples "Parthenope" |
+| Luca Criscuolo | Cybersecurity | University of Naples "Parthenope" |
 
 <td><img src="readme_assets/team.jpg" width="500"/></td>
-
-
-## 🛠️ Status
-
-This is a **functional prototype** developed in under a week. Further iterations would involve:
-
-- Power optimization
-- Expanded gameplay logic and UI polish
-- Data logging for long-term monitoring
-
-## 📫 Contact
-
-This repository is maintained as a reference for the hackathon outcome. For inquiries, feel free to open an issue or reach out directly.
